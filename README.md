@@ -12,8 +12,8 @@ SHA-256, and signed with Ed25519 by [ikigai-sign](https://github.com/ikigai-rs/i
 are Multikey and the signature is base58-btc multibase. No JWT form, and no selective-disclosure
 suite for issuing. Verifying `ecdsa-sd-2023` comes later.
 
-Status: **nothing is built yet.** This repository is a scaffold; the map below is the plan, tracked
-as ledger #4143, #4146, #4147 and #4159.
+Status: **nothing is built yet.** This repository is a scaffold; the map below is the plan,
+tracked as ledger #4143, ledger #4146, ledger #4147 and ledger #4159.
 
 ## The resource map (planned)
 
@@ -81,6 +81,11 @@ Digital Credentials Consortium's `verifier-core` (JavaScript).
 - [ikigai-learn](https://github.com/ikigai-rs/ikigai-learn): courses whose completed releases these
   credentials attest.
 - [ikigai-sign](https://github.com/ikigai-rs/ikigai-sign): the Ed25519 signatures the proofs use.
+
+## Accessibility
+
+See [ACCESSIBILITY.md](ACCESSIBILITY.md): the target (WCAG 2.2 AA), the evidence that exists, what
+has not been tested, and how to report a barrier.
 
 ## License
 
