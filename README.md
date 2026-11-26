@@ -82,6 +82,11 @@ Digital Credentials Consortium's `verifier-core` (JavaScript).
   credentials attest.
 - [ikigai-sign](https://github.com/ikigai-rs/ikigai-sign): the Ed25519 signatures the proofs use.
 
+## Accessibility
+
+See [ACCESSIBILITY.md](ACCESSIBILITY.md): the target (WCAG 2.2 AA), the evidence that exists, what
+has not been tested, and how to report a barrier.
+
 ## License
 
 MIT OR Apache-2.0.

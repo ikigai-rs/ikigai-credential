@@ -1,0 +1,15 @@
+[package]
+name = "ikigai-credential"
+description = "Verifiable credentials as ikigai resources: issue and verify W3C VC 2.0 in the Open Badges 3.0 profile, secured with Data Integrity eddsa-rdfc-2022, with Bitstring Status Lists."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+readme = "../../README.md"
+keywords = ["ikigai", "credentials", "open-badges", "rdf", "roc"]
+categories = ["wasm", "cryptography"]
+# A scaffold: nothing is published until issuing and verifying are built and interoperate.
+publish = false
+
+[dependencies]
