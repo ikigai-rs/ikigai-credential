@@ -12,9 +12,8 @@ SHA-256, and signed with Ed25519 by [ikigai-sign](https://github.com/ikigai-rs/i
 are Multikey and the signature is base58-btc multibase. No JWT form, and no selective-disclosure
 suite for issuing. Verifying `ecdsa-sd-2023` comes later.
 
-Status: **nothing is built yet.** This repository is a scaffold; the map below is the plan, tracked
-as ledger #4143, ledger #4146,
-ledger #4147 and ledger #4159.
+Status: **nothing is built yet.** This repository is a scaffold; the map below is the plan,
+tracked as ledger #4143, ledger #4146, ledger #4147 and ledger #4159.
 
 ## The resource map (planned)
 
