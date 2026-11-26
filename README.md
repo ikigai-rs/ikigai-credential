@@ -13,7 +13,8 @@ are Multikey and the signature is base58-btc multibase. No JWT form, and no sele
 suite for issuing. Verifying `ecdsa-sd-2023` comes later.
 
 Status: **nothing is built yet.** This repository is a scaffold; the map below is the plan, tracked
-as ledger #4143, #4146, #4147 and #4159.
+as ledger #4143, ledger #4146,
+ledger #4147 and ledger #4159.
 
 ## The resource map (planned)
 
