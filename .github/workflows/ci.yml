@@ -10,3 +10,26 @@ jobs:
     uses: ikigai-rs/.github/.github/workflows/rust.yml@main
     with:
       wasm-lib: true
+  dcc-verifier-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Export the badge, DID document and pinned contexts
+        run: IKIGAI_DCC_DIR="$RUNNER_TEMP/dcc" cargo test -p ikigai-credential --test independent_dcc -- --ignored export_for_dcc
+      - name: Install the pinned DCC packages
+        working-directory: crates/ikigai-credential/tests/dcc
+        run: npm install --no-audit --no-fund   # becomes `npm ci` once package-lock.json is committed
+      - name: Verify with verifier-core and sign with DCC, offline
+        working-directory: crates/ikigai-credential/tests/dcc
+        run: node run.mjs "$RUNNER_TEMP/dcc"
+      - name: Verify the DCC-signed badge here
+        run: IKIGAI_DCC_DIR="$RUNNER_TEMP/dcc" cargo test -p ikigai-credential --test independent_dcc -- --ignored a_badge_dcc_signs_verifies_here
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dcc-lockfile
+          path: crates/ikigai-credential/tests/dcc/package-lock.json
