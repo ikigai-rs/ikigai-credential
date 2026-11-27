@@ -18,8 +18,7 @@ offline and in JSON-LD safe mode, pinned by the W3C EdDSA vectors, and `resource
 issuer, achievement, credential, issue and verify resources below, signing through ikigai-sign's
 `urn:sign:sign` and writing one ikigai-log entry per issuance. A badge issued here verifies in
 SpruceID's `ssi`, and one `ssi` signs verifies here (`tests/independent_ssi.rs`, offline). Still
-planned: the DCC `verifier-core` check in CI (its script is `tests/dcc/`), a vendored 1EdTech
-example, a persistent IRI minted through ikigai-name (ikigai-name 0.9.0 has no minting resource,
+planned: the DCC `verifier-core` check in both directions, a vendored 1EdTech example, a persistent IRI minted through ikigai-name (ikigai-name 0.9.0 has no minting resource,
 so the host's template is expanded directly), the status lists (ledger #4146), the page (ledger #4147) and several issuers (ledger
 #4159).
 
