@@ -48,6 +48,19 @@ has not been tested.
   +02:00." Tested in the same file (`a_date_time_with_no_timezone_is_refused`). Sentences from JSON-LD expansion are passed
   through from the `json-ld` crate and are not yet rewritten into plain language.
 
+- **Resource sentences** (`resource`): the issue Sink's refusals, for example "Enrollment e-1
+  has not met its release's completion rule, so no credential is issued." and "Enrollment e-1
+  already has its credential, urn:credential:id:…; a credential is issued once."; the verifier's
+  verdict, which always ends "Its status was not checked: status lists are not built yet.", and its
+  key-history findings, for example "The credential is not valid: its issuer's key
+  did:web:iriref.org#key-1 had expired at 2027-01-01T00:00:00Z, before its validFrom.", "its
+  proof's key … belongs to …, not to its issuer …." and "its issuer's key … is not in this
+  verifier's key history, and keys are never fetched."; and configuration refusals, for example
+  "The completion template \"urn:learn:enrollment\" has no {enrollment}; add it." Tested in
+  `crates/ikigai-credential/tests/resources.rs` (`issue_is_sealed_until_the_completion_rule_holds`,
+  `an_enrollment_is_issued_once`, `a_key_used_after_its_expiry_or_revoked_does_not_verify`,
+  `a_bad_configuration_is_refused_with_a_sentence`).
+
 Still planned: the public credential page with its in-browser Verify button and copy controls.
 
 ### Not ours to fix, still ours to report
@@ -64,13 +77,13 @@ alignment alone; no terminal control characters from untrusted input; American E
 
 ## Conformance status
 
-No conformance claim. There is no output to evaluate yet.
+No conformance claim. The output today is sentences only; no page exists to evaluate yet.
 
 ## Evidence
 
 | Check | Result | Evidence |
 |---|---|---|
-| Refusal and verdict sentences pinned by tests | Blocked | the crate emits no refusal or verdict yet |
+| Refusal and verdict sentences pinned by tests | Pass | `tests/eddsa_rdfc_2022.rs` and `tests/resources.rs` assert the sentences listed under "In scope" |
 | Credential page checked in a browser and by an automated engine | Blocked | no credential page exists yet |
 | Credential page read by a screen reader | Blocked | no credential page exists yet; no screen-reader session has been run |
 
@@ -78,7 +91,10 @@ No conformance claim. There is no output to evaluate yet.
 
 ## Known limitations
 
-None known, because nothing is emitted yet.
+- Refusals that ikigai-core raises before this module runs (a missing grant, a missing argument)
+  are in ikigai-core's words, not this file's.
+- Sentences from JSON-LD expansion are passed through from the `json-ld` crate and are not yet
+  plain language.
 
 ## Contributor requirements
 
@@ -107,6 +123,7 @@ output people read.
 
 - 2026-11-26: first version, for the scaffold.
 - 2026-11-27: the date-time sentences for `validFrom`, `validUntil` and the verifier's clock.
+- 2026-11-27: the resource sentences: the issue Sink's refusals, the verifier's verdict and key-history findings, and configuration refusals.
 
 ## References
 
