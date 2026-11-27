@@ -16,9 +16,12 @@ Status: **the cryptosuite core and the five resources are built; the rest is not
 issues and verifies `eddsa-rdfc-2022` proofs over Open Badges 3.0 credentials (`issue`, `verify`),
 offline and in JSON-LD safe mode, pinned by the W3C EdDSA vectors, and `resource::space` binds the
 issuer, achievement, credential, issue and verify resources below, signing through ikigai-sign's
-`urn:sign:sign`. Still planned: the persistent IRI minted through ikigai-name (the host's template
-is expanded directly for now), the ikigai-log entries, the independent-verifier tests (ledger
-#4143), the status lists (ledger #4146), the page (ledger #4147) and several issuers (ledger
+`urn:sign:sign` and writing one ikigai-log entry per issuance. A badge issued here verifies in
+SpruceID's `ssi`, and one `ssi` signs verifies here (`tests/independent_ssi.rs`, offline), and the
+same holds both ways with the Digital Credentials Consortium's `verifier-core`, including its Open
+Badges 3.0 JSON Schema check (`tests/dcc/`, the `dcc-verifier-core` CI job, offline). Still
+planned: a vendored 1EdTech example, a persistent IRI minted through ikigai-name (ikigai-name 0.9.0 has no minting resource,
+so the host's template is expanded directly), the status lists (ledger #4146), the page (ledger #4147) and several issuers (ledger
 #4159).
 
 ## The resource map
@@ -30,7 +33,7 @@ built (`resource::space`); the page and the status resources are planned.
 |---|---|
 | `urn:credential:issuer:name:{i}` | an issuer: the Open Badges `Profile` (name, URL, a `did:web` identifier). An open Source. Its key lives in ikigai-secret, never in this module |
 | `urn:credential:achievement:course:{c}:release:{r}` | the `Achievement` for a course release (name, description, criteria, alignment, image), composed from whatever describes that release, read through the kernel. An open Source |
-| `urn:credential:issue:enrollment:{n}` | the issue Sink, requiring `urn:cap:credential:issue` and `urn:cap:sign`. Sealed: it refuses (Conflict) unless the enrollment's completion rule holds, and once the enrollment has its credential; it signs through `urn:sign:sign`, and answers the new atom's name (`text/uri-list`). Planned: it assigns a status-list index, and gives the credential a persistent IRI through ikigai-name |
+| `urn:credential:issue:enrollment:{n}` | the issue Sink, requiring `urn:cap:credential:issue`, `urn:cap:sign` and `urn:cap:log:write`. Sealed: it refuses (Conflict) unless the enrollment's completion rule holds, and once the enrollment has its credential; it signs through `urn:sign:sign`, and answers the new atom's name (`text/uri-list`); it writes one `urn:log:write` entry per issuance (who, the enrollment, the credential's IRI; never the subject). Planned: it assigns a status-list index, and gives the credential a persistent IRI through ikigai-name once that offers a minting resource |
 | `urn:credential:id:{id}` | a credential: an atom, written once by the issue Sink and never changed. A Source requiring `urn:cap:credential:read` |
 | `urn:credential:id:{id}:form:page` | the credential's public page (planned below) |
 | `urn:credential:verify` | the verifier: an open Source. A credential in, a verdict sentence out: the proof, that the proof's key belongs to the issuer, the issuer's key as of `validFrom`, the validity window, and (planned) the status read current |
@@ -61,6 +64,9 @@ the issuer, course, release and the opaque student id). Issued credentials are k
   an identity-proofed exam).
 - **Logs, not payloads.** Issuance and revocation are logged and attributed in ikigai-log; the
   credential carries only its proof. A revocation's reason goes to the log, never into the list.
+  The entry's class and columns are declared in `src/vocabulary.ttl`, under
+  `https://ikigai-rs.dev/ns/credential#` (`VOCABULARY_TTL`), which a host that logs passes to
+  ikigai-log's `Vocabulary::extend`.
 - **Bounded input.** JSON-LD nesting depth is bounded before any request input is parsed.
 
 ## Status lists (planned, ledger #4146)

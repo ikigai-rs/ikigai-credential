@@ -1,0 +1,54 @@
+# The ikigai-credential vocabulary: every https://ikigai-rs.dev/ns/credential# term this module
+# emits. Today that is only its ikigai-log entry, one per issuance; the credentials themselves use
+# the W3C VC 2.0 and Open Badges 3.0 vocabularies and nothing of ours.
+#
+# This file IS the published document, to be served at https://ikigai-rs.dev/ns/credential and
+# deployed by hand, as /ns/sign and /ns/log are. `owl:versionInfo` is the crate version
+# (test-pinned), so redeploy /ns/credential after every release that changes this file.
+#
+# It is also an ikigai-log extension: a host that logs passes it to
+# `ikigai_log::Vocabulary::extend`, so the class's level, its subject reading and the line's
+# `key=` columns are data, and the log's transreptor needs no code for them.
+
+@prefix credential: <https://ikigai-rs.dev/ns/credential#> .
+@prefix log:  <https://ikigai-rs.dev/ns/log#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+<https://ikigai-rs.dev/ns/credential> a owl:Ontology ;
+    rdfs:label "ikigai-credential vocabulary" ;
+    rdfs:comment "The terms ikigai-credential emits under its own namespace: the class of its ikigai-log entry for an issued credential, and that entry's columns. It never describes the credential's subject." ;
+    owl:versionInfo "0.1.0" .
+
+# Issuance is written from log:info, the day-to-day default. Not log:always: ikigai-log reserves
+# that level for the markers it writes itself, and urn:log:write refuses a caller's entry in one.
+credential:Issuance a rdfs:Class ;
+    rdfs:subClassOf log:Entry ;
+    log:minLevel log:info ;
+    log:subjectPredicate credential:issued ;
+    rdfs:label "Issuance" ;
+    rdfs:comment "One credential issued by the urn:credential:issue Sink. Its subject is the credential's public IRI; it names the enrollment and the issuer, and ikigai-log attributes it to the principal that issued. It never carries the credential's subject: no name, email, email hash, salt or did:key." .
+
+credential:issued a rdf:Property ;
+    rdfs:subPropertyOf prov:generated ;
+    rdfs:domain credential:Issuance ;
+    rdfs:range rdfs:Resource ;
+    rdfs:label "issued" ;
+    rdfs:comment "The credential an issuance generated, as its public IRI: the entry's subject column, read precisely." .
+
+credential:enrollment a rdf:Property ;
+    log:keyName "enrollment" ;
+    rdfs:domain credential:Issuance ;
+    rdfs:range xsd:string ;
+    rdfs:label "enrollment" ;
+    rdfs:comment "The enrollment the credential was issued for, as the {n} of urn:credential:issue:enrollment:{n}: the host's opaque key, never a person's name or address." .
+
+credential:issuer a rdf:Property ;
+    log:keyName "issuer" ;
+    rdfs:domain credential:Issuance ;
+    rdfs:range xsd:string ;
+    rdfs:label "issuer" ;
+    rdfs:comment "The issuer that signed, as the {i} of urn:credential:issuer:name:{i}." .
