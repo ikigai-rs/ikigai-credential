@@ -8,7 +8,7 @@
 //! pinned, offline loader, and documents are read in JSON-LD safe mode.
 //!
 //! This is the cryptosuite core. The `urn:credential:*` resources in the README's map are built
-//! on it. Every name lives under [`NAMESPACE`].
+//! on it, in [`resource`]. Every name lives under [`NAMESPACE`].
 #![forbid(unsafe_code)]
 
 mod canon;

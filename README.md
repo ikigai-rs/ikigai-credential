@@ -12,26 +12,40 @@ SHA-256, and signed with Ed25519 by [ikigai-sign](https://github.com/ikigai-rs/i
 are Multikey and the signature is base58-btc multibase. No JWT form, and no selective-disclosure
 suite for issuing. Verifying `ecdsa-sd-2023` comes later.
 
-Status: **the cryptosuite core is built; the resources are not.** The crate issues and verifies
-`eddsa-rdfc-2022` proofs over Open Badges 3.0 credentials (`issue`, `verify`), offline and in
-JSON-LD safe mode, pinned by the W3C EdDSA vectors. The `urn:credential:*` resources in the map
-below, the independent-verifier tests and the status lists are still the plan, tracked as ledger
-#4143, ledger #4146, ledger #4147 and ledger #4159.
+Status: **the cryptosuite core and the five resources are built; the rest is not.** The crate
+issues and verifies `eddsa-rdfc-2022` proofs over Open Badges 3.0 credentials (`issue`, `verify`),
+offline and in JSON-LD safe mode, pinned by the W3C EdDSA vectors, and `resource::space` binds the
+issuer, achievement, credential, issue and verify resources below, signing through ikigai-sign's
+`urn:sign:sign`. Still planned: the persistent IRI minted through ikigai-name (the host's template
+is expanded directly for now), the ikigai-log entries, the independent-verifier tests (ledger
+#4143), the status lists (ledger #4146), the page (ledger #4147) and several issuers (ledger
+#4159).
 
-## The resource map (planned)
+## The resource map
 
-Names are singular, the type first, and every partition is by a named key.
+Names are singular, the type first, and every partition is by a named key. The first five are
+built (`resource::space`); the page and the status resources are planned.
 
 | Name | What it is |
 |---|---|
-| `urn:credential:issuer:name:{i}` | an issuer: the Open Badges `Profile` (name, URL, a `did:web` identifier). Its key lives in ikigai-secret, never in this module |
-| `urn:credential:achievement:course:{c}:release:{r}` | the `Achievement` for a course release (name, description, criteria, alignment, image), composed from whatever describes that release |
-| `urn:credential:issue:enrollment:{n}` | the issue Sink. Sealed: it refuses (Conflict) unless the release's completion rule holds; it signs, assigns a status-list index, and gives the credential a persistent IRI through ikigai-name |
-| `urn:credential:id:{id}` | a credential: an atom, written once by the issue Sink and never changed |
+| `urn:credential:issuer:name:{i}` | an issuer: the Open Badges `Profile` (name, URL, a `did:web` identifier). An open Source. Its key lives in ikigai-secret, never in this module |
+| `urn:credential:achievement:course:{c}:release:{r}` | the `Achievement` for a course release (name, description, criteria, alignment, image), composed from whatever describes that release, read through the kernel. An open Source |
+| `urn:credential:issue:enrollment:{n}` | the issue Sink, requiring `urn:cap:credential:issue` and `urn:cap:sign`. Sealed: it refuses (Conflict) unless the enrollment's completion rule holds, and once the enrollment has its credential; it signs through `urn:sign:sign`, and answers the new atom's name (`text/uri-list`). Planned: it assigns a status-list index, and gives the credential a persistent IRI through ikigai-name |
+| `urn:credential:id:{id}` | a credential: an atom, written once by the issue Sink and never changed. A Source requiring `urn:cap:credential:read` |
 | `urn:credential:id:{id}:form:page` | the credential's public page (planned below) |
-| `urn:credential:verify` | the verifier: an open Source. A credential in, a verdict out: the proof, the issuer's key as of `validFrom`, the validity window, and the status read current |
+| `urn:credential:verify` | the verifier: an open Source. A credential in, a verdict sentence out: the proof, that the proof's key belongs to the issuer, the issuer's key as of `validFrom`, the validity window, and (planned) the status read current |
 | `urn:credential:status:list:{l}` | a Bitstring Status List credential, one per purpose per issuer |
 | `urn:credential:status:credential:{id}:purpose:{p}` | the Sinks that revoke (permanent) or suspend (reversible) one credential |
+
+### Configuration
+
+The host gives `resource::Config`: its issuers (name, display name, URL, `did:web` identifier, the
+template a credential's public `id` comes from, and the key history: each key's Multikey, the IRI
+of its private key in ikigai-secret, the scopes reading it needs, and `expires` once retired), and
+two IRI templates the module reads through the kernel: the description of a course release
+(`{course}`, `{release}`) and an enrollment's completion (`{enrollment}`: whether the rule holds,
+the issuer, course, release and the opaque student id). Issued credentials are kept by an
+`AtomStore` the host supplies; `MemoryAtoms` keeps them in memory.
 
 ## Requirements the design holds to
 
