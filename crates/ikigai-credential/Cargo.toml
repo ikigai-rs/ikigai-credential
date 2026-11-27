@@ -35,3 +35,5 @@ getrandom = { version = "0.3", features = ["wasm_js"] }
 
 [dev-dependencies]
 ed25519-dalek = { version = "2", features = ["rand_core", "pkcs8", "pem"] }
+ssi = "0.16"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
