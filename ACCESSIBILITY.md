@@ -59,7 +59,13 @@ has not been tested.
   "The completion template \"urn:learn:enrollment\" has no {enrollment}; add it." Tested in
   `crates/ikigai-credential/tests/resources.rs` (`issue_is_sealed_until_the_completion_rule_holds`,
   `an_enrollment_is_issued_once`, `a_key_used_after_its_expiry_or_revoked_does_not_verify`,
-  `a_bad_configuration_is_refused_with_a_sentence`).
+  `a_bad_configuration_is_refused_with_a_sentence`). When the issuance's log entry cannot be
+  written, the Sink says "The credential … was issued, but its urn:log:write entry failed: …."
+  (not yet exercised by a test).
+- **The issuance log line** (ikigai-log's grammar, read by operators with `grep`): `<stamp>
+  <https://ikigai-rs.dev/ns/credential#Issuance> <credential IRI> principal=… enrollment=…
+  issuer=…`. Tested in `crates/ikigai-credential/tests/resources.rs`
+  (`each_issuance_is_one_attributed_log_line_without_the_subject`).
 
 Still planned: the public credential page with its in-browser Verify button and copy controls.
 
@@ -124,6 +130,7 @@ output people read.
 - 2026-11-26: first version, for the scaffold.
 - 2026-11-27: the date-time sentences for `validFrom`, `validUntil` and the verifier's clock.
 - 2026-11-27: the resource sentences: the issue Sink's refusals, the verifier's verdict and key-history findings, and configuration refusals.
+- 2026-11-27: the issuance log line and the sentence for a log entry that could not be written.
 
 ## References
 

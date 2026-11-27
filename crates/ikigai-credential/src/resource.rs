@@ -6,18 +6,21 @@
 //! | `urn:credential:issuer:name:{i}` | Source | nothing: an issuer's profile is public |
 //! | `urn:credential:achievement:course:{c}:release:{r}` | Source | nothing: composed from the release's description, read through the kernel |
 //! | `urn:credential:id:{id}` | Source | [`CAP_READ`]: whether a credential is shown is its holder's choice, not this module's |
-//! | `urn:credential:issue:enrollment:{n}` | Sink | [`CAP_ISSUE`] and ikigai-sign's `urn:cap:sign`, plus whatever the host says its issuers' keys need |
+//! | `urn:credential:issue:enrollment:{n}` | Sink | [`CAP_ISSUE`], ikigai-sign's `urn:cap:sign` and ikigai-log's [`CAP_LOG_WRITE`], plus whatever the host says its issuers' keys need |
 //! | `urn:credential:verify` | Source | nothing: verification is public |
 //!
 //! The issue Sink is sealed by state: it answers `Conflict` unless the enrollment's completion
 //! rule holds, and once an enrollment has its credential it answers `Conflict` naming it. It
 //! signs through the kernel: the 64-byte `eddsa-rdfc-2022` message goes to ikigai-sign's
 //! `urn:sign:sign` with the issuer's key IRI (a resource in ikigai-secret), so the key never
-//! enters this module. The credential it writes is an atom: written once, never changed.
+//! enters this module. The credential it writes is an atom: written once, never changed. Each
+//! issuance then writes one ikigai-log entry through `urn:log:write` ([`ISSUANCE_CLASS`], about
+//! the credential's public IRI, with the enrollment and the issuer; ikigai-log attributes it to
+//! the caller's principal), and never the subject's email, hash or did:key.
 //!
-//! Not here yet (ledger #4143, part 3): the persistent IRI minted through ikigai-name (the host's
-//! IRI template is expanded directly for now), the ikigai-log entries for issuance, the status
-//! list (ledger #4146), and the independent verifiers.
+//! The credential's public IRI comes from the host's per-issuer template, expanded here:
+//! ikigai-name 0.9.0 resolves and administers namespaces but has no resource that mints a single
+//! IRI. The status list is ledger #4146.
 
 use crate::{parse_bounded, parse_stamp, prepare, ProofOptions, Verdict};
 use async_trait::async_trait;
@@ -26,7 +29,7 @@ use ed25519_dalek::{Signature, VerifyingKey};
 use ikigai_core::{
     ArgRef, ArgSpec, Bindings, Description, Endpoint, EndpointSpace, Error as CoreError,
     FailureClass, InputGroup, Invocation, Iri, ReprType, Representation, Request,
-    Result as CoreResult, UriTemplate, Verb,
+    Result as CoreResult, UriTemplate, Verb, PRINCIPAL_SCOPE_PREFIX,
 };
 use ikigai_sign::multikey::{did_key_resolve, multikey_decode, DID_KEY_PREFIX};
 use oxsdatatypes::{DateTime, DayTimeDuration};
@@ -48,6 +51,16 @@ pub const CAP_SIGN: &str = ikigai_sign::CAP_SIGN;
 
 /// ikigai-sign's signing resource.
 pub const SIGN: &str = "urn:sign:sign";
+
+/// ikigai-log's append point, where the issue Sink writes one entry per issuance.
+pub const LOG_WRITE: &str = "urn:log:write";
+
+/// ikigai-log's capability to append an entry, which the issue Sink's sub-request to
+/// [`LOG_WRITE`] runs under.
+pub const CAP_LOG_WRITE: &str = "urn:cap:log:write";
+
+/// The class of the issue Sink's log entry: one credential issued.
+pub const ISSUANCE_CLASS: &str = "https://ikigai-rs.dev/ns/credential#Issuance";
 
 /// The verifier's name.
 pub const VERIFY: &str = "urn:credential:verify";
@@ -824,10 +837,41 @@ async fn sign_through_kernel(
     Ok(signature)
 }
 
+/// Write the one ikigai-log entry an issuance gets: about the credential's public IRI, with the
+/// enrollment and the issuer. ikigai-log attributes it to the caller's principal itself; the
+/// subject's email, its hash and its did:key never reach the log.
+async fn log_issuance(
+    inv: &Invocation<'_>,
+    enrollment: &str,
+    issuer: &str,
+    credential: &str,
+) -> CoreResult<()> {
+    let fields = format!("enrollment={enrollment} issuer={issuer}");
+    let log = Iri::parse(LOG_WRITE).expect("a fixed IRI");
+    let request = Request::new(Verb::Sink, log)
+        .with_arg("class", ArgRef::Inline(ISSUANCE_CLASS.as_bytes().to_vec()))
+        .with_arg("subject", ArgRef::Inline(credential.as_bytes().to_vec()))
+        .with_arg("fields", ArgRef::Inline(fields.into_bytes()));
+    let mut scopes = vec![CAP_LOG_WRITE.to_owned()];
+    if let Some(principal) = inv.capability.principal() {
+        scopes.push(format!("{PRINCIPAL_SCOPE_PREFIX}{principal}"));
+    }
+    inv.issue_attenuated(request, scopes).await.map_err(|e| {
+        CoreError::Endpoint(format!(
+            "The credential {credential} was issued, but its {LOG_WRITE} entry failed: {e}."
+        ))
+    })?;
+    Ok(())
+}
+
 #[async_trait]
 impl Endpoint for Issue {
     async fn invoke(&self, inv: &Invocation<'_>) -> CoreResult<Representation> {
-        deny_unless(inv, &[CAP_ISSUE, CAP_SIGN], "urn:credential:issue")?;
+        deny_unless(
+            inv,
+            &[CAP_ISSUE, CAP_SIGN, CAP_LOG_WRITE],
+            "urn:credential:issue",
+        )?;
         let enrollment = bound(inv, "n", "enrollment")?;
         let shared = &self.0;
         if let Some(id) = shared.store.issued_for(enrollment) {
@@ -933,6 +977,7 @@ impl Endpoint for Issue {
                 return Err(CoreError::Endpoint("A fresh credential id was already taken; issue again.".into()))
             }
         }
+        log_issuance(inv, enrollment, &issuer.name, &public_id).await?;
         Ok(text_repr(
             MEDIA_URI_LIST,
             format!("urn:credential:id:{id}\r\n"),
@@ -957,6 +1002,7 @@ impl Endpoint for Issue {
             .verb(Verb::Sink)
             .requires(CAP_ISSUE)
             .requires(CAP_SIGN)
+            .requires(CAP_LOG_WRITE)
             .input(
                 ArgSpec::new("n")
                     .summary("the enrollment")

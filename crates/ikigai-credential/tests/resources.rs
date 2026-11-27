@@ -12,8 +12,8 @@ use ikigai_core::{
     UriTemplate, Verb,
 };
 use ikigai_credential::resource::{
-    space, AtomStore, Config, IssuerConfig, IssuerKey, MemoryAtoms, CAP_ISSUE, CAP_READ, CAP_SIGN,
-    VERIFY,
+    space, AtomStore, Config, IssuerConfig, IssuerKey, MemoryAtoms, CAP_ISSUE, CAP_LOG_WRITE,
+    CAP_READ, CAP_SIGN, ISSUANCE_CLASS, VERIFY,
 };
 use ikigai_credential::{canonicalize, issue, ProofOptions, Signer};
 use ikigai_sign::multikey::{did_key_encode, multibase_decode, multibase_encode, multikey_encode};
@@ -97,6 +97,8 @@ struct Host {
     kernel: Kernel,
     store: Arc<MemoryAtoms>,
     completions: Completions,
+    /// The lines ikigai-log wrote, in order.
+    log: Arc<Mutex<Vec<String>>>,
 }
 
 fn pem(seed: u8) -> Vec<u8> {
@@ -142,12 +144,30 @@ fn host_with(config: Config, store: Arc<MemoryAtoms>, with_sign: bool, millis: u
     if with_sign {
         spaces.push(Arc::new(ikigai_sign::space()));
     }
+    let log: Arc<Mutex<Vec<String>>> = Arc::default();
+    let handle = Arc::new(ikigai_log::LogHandle::new(
+        None,
+        None,
+        ikigai_log::LogConfig::default().with_instance("credential:test"),
+    ));
+    let lines = log.clone();
+    handle
+        .open_with_sink(
+            ikigai_log::Vocabulary::shared_builtin(),
+            ikigai_log::Timestamp::from_millis(millis),
+            Box::new(ikigai_log::ClosureSink(move |line: &str| {
+                lines.lock().unwrap().push(line.to_owned())
+            })),
+        )
+        .unwrap();
+    spaces.push(Arc::new(ikigai_log::endpoints::space(handle)));
     let kernel =
         Kernel::new(Arc::new(Fallback::new(spaces))).with_clock(Arc::new(FixedClock::at(millis)));
     Host {
         kernel,
         store,
         completions,
+        log,
     }
 }
 
@@ -217,8 +237,13 @@ fn none() -> Capability {
     Capability::scoped(Vec::<String>::new())
 }
 
+/// Who issues in these tests: the principal ikigai-log attributes each issuance to.
+const REGISTRAR: &str = "urn:principal:registrar";
+
 fn issuer_grant() -> Capability {
-    Capability::scoped([CAP_ISSUE, CAP_SIGN])
+    Capability::scoped([CAP_ISSUE, CAP_SIGN, CAP_LOG_WRITE])
+        .with_principal(REGISTRAR)
+        .unwrap()
 }
 
 fn holder() -> String {
@@ -396,12 +421,14 @@ fn an_enrollment_is_issued_once() {
 }
 
 #[test]
-fn issuing_needs_both_the_issue_and_the_sign_grant() {
+fn issuing_needs_the_issue_the_sign_and_the_log_grant() {
     let host = host();
     host.complete("e-1", true);
     for cap in [
         Capability::scoped([CAP_ISSUE]),
         Capability::scoped([CAP_SIGN]),
+        Capability::scoped([CAP_ISSUE, CAP_SIGN]),
+        Capability::scoped([CAP_LOG_WRITE]),
         Capability::scoped([CAP_READ]),
         none(),
     ] {
@@ -443,7 +470,10 @@ fn the_declared_capabilities_are_the_enforced_ones() {
     let host = host();
     let describe = |iri: &str| host.kernel.describe(&Iri::parse(iri).unwrap()).unwrap();
     let issue = describe("urn:credential:issue:enrollment:e-1");
-    assert_eq!(issue.required_scopes(Verb::Sink), [CAP_ISSUE, CAP_SIGN]);
+    assert_eq!(
+        issue.required_scopes(Verb::Sink),
+        [CAP_ISSUE, CAP_SIGN, CAP_LOG_WRITE]
+    );
     let atom = describe("urn:credential:id:abc");
     assert_eq!(atom.required_scopes(Verb::Source), [CAP_READ]);
     for open in [
@@ -466,7 +496,7 @@ fn the_declared_capabilities_are_the_enforced_ones() {
         .unwrap();
     assert_eq!(
         issue.required_scopes(Verb::Sink),
-        [CAP_ISSUE, CAP_SIGN, "urn:cap:secret:read"]
+        [CAP_ISSUE, CAP_SIGN, CAP_LOG_WRITE, "urn:cap:secret:read"]
     );
     host.complete("e-1", true);
     let err = host
@@ -513,6 +543,59 @@ fn an_email_is_only_emitted_salted_and_hashed_and_never_joins_two_credentials() 
     }
     assert_ne!(hashes[0].0, hashes[1].0);
     assert_ne!(hashes[0].1, hashes[1].1);
+}
+
+#[test]
+fn each_issuance_is_one_attributed_log_line_without_the_subject() {
+    let host = host();
+    host.complete("e-1", true);
+    let atom = host
+        .issue(
+            "e-1",
+            &[("name", "Ada Lovelace"), ("email", "ada@example.org")],
+            &issuer_grant(),
+        )
+        .unwrap();
+    let credential = host
+        .read(atom.trim(), &Capability::scoped([CAP_READ]))
+        .unwrap();
+    let public_id = credential["id"].as_str().unwrap();
+    let hash = credential["credentialSubject"]["identifier"][1]["identityHash"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let log = host.log.lock().unwrap().clone();
+    let issued: Vec<&String> = log
+        .iter()
+        .filter(|line| line.contains(ISSUANCE_CLASS))
+        .collect();
+    assert_eq!(issued.len(), 1, "{log:#?}");
+    let line = issued[0];
+    // `<stamp> <class> <subject> key=value…`: about the credential's public IRI, attributed to
+    // the issuing principal, naming the enrollment and the issuer.
+    let columns: Vec<&str> = line.split(' ').collect();
+    assert_eq!(columns[1], format!("<{ISSUANCE_CLASS}>"), "{line}");
+    assert_eq!(columns[2], public_id, "{line}");
+    assert!(line.contains(" enrollment=e-1"), "{line}");
+    assert!(line.contains(" issuer=iriref"), "{line}");
+    assert!(line.contains(&format!("principal={REGISTRAR}")), "{line}");
+    // Never the subject: not the email, its hash, its salt, nor the holder's name.
+    for secret in ["ada@example.org", hash.as_str(), "Ada", "sha256$"] {
+        assert!(!line.contains(secret), "{line}");
+    }
+    let salt = credential["credentialSubject"]["identifier"][1]["salt"]
+        .as_str()
+        .unwrap();
+    assert!(!line.contains(salt), "{line}");
+
+    // A refused issuance writes nothing.
+    let refused = host.issue("e-1", &holder_did(), &issuer_grant());
+    assert!(refused.is_err());
+    let after = host.log.lock().unwrap().clone();
+    assert_eq!(
+        after.iter().filter(|l| l.contains(ISSUANCE_CLASS)).count(),
+        1
+    );
 }
 
 #[test]
