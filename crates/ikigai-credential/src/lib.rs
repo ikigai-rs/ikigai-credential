@@ -12,6 +12,7 @@
 #![forbid(unsafe_code)]
 
 mod canon;
+pub mod resource;
 
 use ed25519_dalek::{Signature, VerifyingKey};
 use ikigai_sign::multikey::{multibase_decode, multibase_encode};
@@ -125,6 +126,33 @@ pub fn issue(
     options: &ProofOptions,
     signer: &impl Signer,
 ) -> Result<Value, Error> {
+    let prepared = prepare(unsecured, options)?;
+    let signature = signer.sign(&prepared.message).map_err(Error::Sign)?;
+    Ok(prepared.secure(&signature))
+}
+
+/// An unsecured credential checked and hashed for signing: the 64 bytes to sign, and the
+/// document and proof the signature completes.
+pub(crate) struct Prepared {
+    document: Map<String, Value>,
+    proof: Map<String, Value>,
+    pub(crate) message: [u8; 64],
+}
+
+impl Prepared {
+    /// The secured credential: the proof, with the signature as base58-btc multibase.
+    pub(crate) fn secure(mut self, signature: &[u8; 64]) -> Value {
+        self.proof
+            .insert("proofValue".into(), multibase_encode(signature).into());
+        self.document
+            .insert("proof".into(), Value::Object(self.proof));
+        Value::Object(self.document)
+    }
+}
+
+/// Check `unsecured` and compute the `eddsa-rdfc-2022` message for it, before any signer is
+/// asked: [`issue`] signs in process, the issue resource asks ikigai-sign through the kernel.
+pub(crate) fn prepare(unsecured: &Value, options: &ProofOptions) -> Result<Prepared, Error> {
     let Value::Object(document) = unsecured else {
         return Err(Error::Input("The credential must be a JSON object.".into()));
     };
@@ -148,11 +176,11 @@ pub fn issue(
     );
     proof.insert("proofPurpose".into(), options.proof_purpose.clone().into());
     let message = hash_for(document, &proof)?;
-    let signature = signer.sign(&message).map_err(Error::Sign)?;
-    proof.insert("proofValue".into(), multibase_encode(&signature).into());
-    let mut secured = document.clone();
-    secured.insert("proof".into(), Value::Object(proof));
-    Ok(Value::Object(secured))
+    Ok(Prepared {
+        document: document.clone(),
+        proof,
+        message,
+    })
 }
 
 /// What verification found. [`Verdict::sentence`] says it in words.
