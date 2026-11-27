@@ -29,6 +29,23 @@ use std::str::FromStr;
 /// ```
 pub const NAMESPACE: &str = "urn:credential:";
 
+/// The vocabulary of every `https://ikigai-rs.dev/ns/credential#` term this module emits, as
+/// Turtle, to be deployed by hand to <https://ikigai-rs.dev/ns/credential>. A host that logs
+/// passes it to ikigai-log's `Vocabulary::extend`, so an issuance's class and columns are
+/// declared terms there.
+///
+/// ```
+/// assert!(ikigai_credential::VOCABULARY_TTL.contains("owl:Ontology"));
+/// ```
+pub const VOCABULARY_TTL: &str = include_str!("vocabulary.ttl");
+
+/// The vocabulary namespace, defined in [`VOCABULARY_TTL`].
+///
+/// ```
+/// assert_eq!(ikigai_credential::VOCABULARY_NS, "https://ikigai-rs.dev/ns/credential#");
+/// ```
+pub const VOCABULARY_NS: &str = "https://ikigai-rs.dev/ns/credential#";
+
 /// The one cryptosuite this crate issues and verifies.
 pub const CRYPTOSUITE: &str = "eddsa-rdfc-2022";
 

@@ -62,6 +62,9 @@ the issuer, course, release and the opaque student id). Issued credentials are k
   an identity-proofed exam).
 - **Logs, not payloads.** Issuance and revocation are logged and attributed in ikigai-log; the
   credential carries only its proof. A revocation's reason goes to the log, never into the list.
+  The entry's class and columns are declared in `src/vocabulary.ttl`, under
+  `https://ikigai-rs.dev/ns/credential#` (`VOCABULARY_TTL`), which a host that logs passes to
+  ikigai-log's `Vocabulary::extend`.
 - **Bounded input.** JSON-LD nesting depth is bounded before any request input is parsed.
 
 ## Status lists (planned, ledger #4146)

@@ -153,7 +153,7 @@ fn host_with(config: Config, store: Arc<MemoryAtoms>, with_sign: bool, millis: u
     let lines = log.clone();
     handle
         .open_with_sink(
-            ikigai_log::Vocabulary::shared_builtin(),
+            Arc::new(log_vocabulary()),
             ikigai_log::Timestamp::from_millis(millis),
             Box::new(ikigai_log::ClosureSink(move |line: &str| {
                 lines.lock().unwrap().push(line.to_owned())
@@ -169,6 +169,15 @@ fn host_with(config: Config, store: Arc<MemoryAtoms>, with_sign: bool, millis: u
         completions,
         log,
     }
+}
+
+/// ikigai-log's vocabulary extended with this module's, as a host that logs loads it.
+fn log_vocabulary() -> ikigai_log::Vocabulary {
+    let mut vocabulary = ikigai_log::Vocabulary::builtin().clone();
+    vocabulary
+        .extend(ikigai_credential::VOCABULARY_TTL)
+        .expect("the credential vocabulary parses");
+    vocabulary
 }
 
 fn host() -> Host {
@@ -856,4 +865,82 @@ fn a_bad_configuration_is_refused_with_a_sentence() {
         err.to_string(),
         "The completion template \"urn:learn:enrollment\" has no {enrollment}; add it."
     );
+}
+
+/// Every `https://ikigai-rs.dev/ns/credential#` term the module emits, in its log line or in a
+/// credential, is declared in its vocabulary with a type, a label and a comment; the vocabulary
+/// carries the crate version; and ikigai-log, extended with it, claims every column of the line.
+#[test]
+fn every_credential_term_the_module_emits_is_declared() {
+    use oxrdfio::{RdfFormat, RdfParser};
+    const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+    const LABEL: &str = "http://www.w3.org/2000/01/rdf-schema#label";
+    const COMMENT: &str = "http://www.w3.org/2000/01/rdf-schema#comment";
+    const VERSION: &str = "http://www.w3.org/2002/07/owl#versionInfo";
+    let quads: Vec<_> = RdfParser::from_format(RdfFormat::Turtle)
+        .for_slice(ikigai_credential::VOCABULARY_TTL.as_bytes())
+        .collect::<Result<_, _>>()
+        .unwrap();
+    let says = |subject: &str, predicate: &str| -> Vec<String> {
+        quads
+            .iter()
+            .filter(|q| {
+                matches!(&q.subject, oxrdf::NamedOrBlankNode::NamedNode(n) if n.as_str() == subject)
+                    && q.predicate.as_str() == predicate
+            })
+            .map(|q| match &q.object {
+                oxrdf::Term::Literal(l) => l.value().to_owned(),
+                other => other.to_string(),
+            })
+            .collect()
+    };
+    let ontology = ikigai_credential::VOCABULARY_NS.trim_end_matches('#');
+    assert_eq!(says(ontology, VERSION), [env!("CARGO_PKG_VERSION")]);
+
+    let host = host();
+    host.complete("e-1", true);
+    let atom = host.issue("e-1", &holder_did(), &issuer_grant()).unwrap();
+    let credential = host
+        .read(atom.trim(), &Capability::scoped([CAP_READ]))
+        .unwrap();
+    let log = host.log.lock().unwrap().clone();
+    let emitted = format!("{ISSUANCE_CLASS} {} {}", log.join("\n"), credential);
+    let mut terms: Vec<&str> = emitted
+        .match_indices(ikigai_credential::VOCABULARY_NS)
+        .map(|(at, _)| {
+            let rest = &emitted[at..];
+            let end = rest
+                .find(|c: char| !(c.is_ascii_alphanumeric() || "#:/._-".contains(c)))
+                .unwrap_or(rest.len());
+            &rest[..end]
+        })
+        .collect();
+    terms.sort_unstable();
+    terms.dedup();
+    assert_eq!(terms, [ISSUANCE_CLASS], "{emitted}");
+    for term in terms {
+        for predicate in [RDF_TYPE, LABEL, COMMENT] {
+            assert_eq!(says(term, predicate).len(), 1, "{term} {predicate}");
+        }
+    }
+
+    let vocabulary = log_vocabulary();
+    assert!(vocabulary.is_a(ISSUANCE_CLASS, "https://ikigai-rs.dev/ns/log#Entry"));
+    let line = log
+        .iter()
+        .find(|line| line.contains(ISSUANCE_CLASS))
+        .expect("one issuance line");
+    for column in line.split(' ').skip(3) {
+        let (key, _) = column.split_once('=').expect("a key=value column");
+        let declared = vocabulary.key(key).map(|k| k.property.as_str());
+        assert!(declared.is_some(), "{key} is undeclared in {line}");
+        for (ours, property) in [("enrollment", "enrollment"), ("issuer", "issuer")] {
+            if key == ours {
+                assert_eq!(
+                    declared,
+                    Some(format!("{}{property}", ikigai_credential::VOCABULARY_NS).as_str())
+                );
+            }
+        }
+    }
 }

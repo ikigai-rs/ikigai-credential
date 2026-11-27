@@ -59,7 +59,8 @@ pub const LOG_WRITE: &str = "urn:log:write";
 /// [`LOG_WRITE`] runs under.
 pub const CAP_LOG_WRITE: &str = "urn:cap:log:write";
 
-/// The class of the issue Sink's log entry: one credential issued.
+/// The class of the issue Sink's log entry: one credential issued. Declared in
+/// [`VOCABULARY_TTL`](crate::VOCABULARY_TTL).
 pub const ISSUANCE_CLASS: &str = "https://ikigai-rs.dev/ns/credential#Issuance";
 
 /// The verifier's name.
