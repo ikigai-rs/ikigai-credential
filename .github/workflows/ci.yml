@@ -22,14 +22,9 @@ jobs:
         run: IKIGAI_DCC_DIR="$RUNNER_TEMP/dcc" cargo test -p ikigai-credential --test independent_dcc -- --ignored export_for_dcc
       - name: Install the pinned DCC packages
         working-directory: crates/ikigai-credential/tests/dcc
-        run: npm install --no-audit --no-fund   # becomes `npm ci` once package-lock.json is committed
+        run: npm ci --no-audit --no-fund
       - name: Verify with verifier-core and sign with DCC, offline
         working-directory: crates/ikigai-credential/tests/dcc
         run: node run.mjs "$RUNNER_TEMP/dcc"
       - name: Verify the DCC-signed badge here
         run: IKIGAI_DCC_DIR="$RUNNER_TEMP/dcc" cargo test -p ikigai-credential --test independent_dcc -- --ignored a_badge_dcc_signs_verifies_here
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: dcc-lockfile
-          path: crates/ikigai-credential/tests/dcc/package-lock.json
