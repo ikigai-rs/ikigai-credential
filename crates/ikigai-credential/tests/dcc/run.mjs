@@ -6,16 +6,30 @@
 // ikigai-jsonld's pinned copies. This script writes dcc-signed.json for the Rust side to verify.
 //
 // No network: globalThis.fetch is replaced BEFORE any DCC module is imported, and answers only
-// the DID document and the pinned contexts from <dir>; any other URL fails the run.
+// the DID document and the pinned contexts from <dir>, and the Open Badges 3.0 JSON Schema
+// verifier-core checks a badge against, vendored beside this script (see SOURCE.md) and checked
+// against its digest. Any other URL fails the run.
 import { readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { createPrivateKey, sign as edSign } from 'node:crypto';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createHash, createPrivateKey, sign as edSign } from 'node:crypto';
 
 const dir = process.argv[2];
 if (!dir) throw new Error('usage: node run.mjs <dir>');
 const read = (name) => JSON.parse(readFileSync(join(dir, name), 'utf8'));
 const local = new Map([['https://iriref.org/.well-known/did.json', read('did.json')]]);
 for (const [url, file] of Object.entries(read('contexts.json'))) local.set(url, read(file));
+const OB3_SCHEMA =
+  'https://purl.imsglobal.org/spec/ob/v3p0/schema/json/ob_v3p0_achievementcredential_schema.json';
+const OB3_SCHEMA_SHA256 = 'b7358e895f492e74055dc6bfc7ffc420d0e497f90c4579fb83d9519b86d393ea';
+const schemaBytes = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), 'ob_v3p0_achievementcredential_schema.json'),
+);
+const schemaDigest = createHash('sha256').update(schemaBytes).digest('hex');
+if (schemaDigest !== OB3_SCHEMA_SHA256) {
+  throw new Error(`the vendored OB3 schema is not the copy SOURCE.md names (sha256 ${schemaDigest})`);
+}
+local.set(OB3_SCHEMA, JSON.parse(schemaBytes.toString('utf8')));
 const refused = [];
 globalThis.fetch = async (input) => {
   const url = typeof input === 'string' ? input : input.url ?? String(input);
@@ -46,6 +60,21 @@ const check = (label, ok, detail) => {
 };
 const signatureValid = (result) =>
   !result.errors && result.log?.some((step) => step.id === 'valid_signature' && step.valid === true);
+// verifier-core's schema verdict: one result per schema, each { schema, result: { valid } }.
+const schemaResults = (result) =>
+  result.additionalInformation?.find((entry) => entry.id === 'schema_check')?.results;
+const schemaValid = (result) => {
+  const results = schemaResults(result);
+  return (
+    Array.isArray(results) &&
+    results.length > 0 &&
+    results.every((r) => r.schema === OB3_SCHEMA && r.result?.valid === true)
+  );
+};
+const schemaInvalid = (result) => {
+  const results = schemaResults(result);
+  return Array.isArray(results) && results.some((r) => r.result?.valid === false);
+};
 
 // (a) A badge issued here verifies in verifier-core; a changed claim does not.
 const issued = read('issued.json');
@@ -55,6 +84,7 @@ const changed = structuredClone(issued);
 changed.name = 'Advanced RDF';
 const refusedResult = await verifyCredential({ credential: changed, knownDIDRegistries: [] });
 check('verifier-core refuses it once a claim is changed', !signatureValid(refusedResult), refusedResult);
+check('the badge ikigai-credential issued meets the OB3 JSON Schema, offline', schemaValid(result), result);
 
 // (b) DCC signs the same unsigned badge with eddsa-rdfc-2022. Canonicalization, hashing and proof
 // assembly are DCC's suite; only the Ed25519 primitive is Node's, from the test seed (32 bytes of
@@ -78,6 +108,19 @@ const signed = await vc.issue({ credential: read('unsigned.json'), suite, docume
 writeFileSync(join(dir, 'dcc-signed.json'), JSON.stringify(signed, null, 2));
 const selfCheck = await verifyCredential({ credential: signed, knownDIDRegistries: [] });
 check('verifier-core verifies the badge DCC signed', signatureValid(selfCheck), selfCheck);
+check('the badge DCC signed meets the OB3 JSON Schema, offline', schemaValid(selfCheck), selfCheck);
+
+// Negative control for the schema check: verifier-core checks the schema only once the signature
+// holds, so DCC signs a badge whose achievement has no description (the schema requires one).
+const undescribed = read('unsigned.json');
+delete undescribed.credentialSubject.achievement.description;
+const undescribedSigned = await vc.issue({ credential: undescribed, suite, documentLoader });
+const undescribedResult = await verifyCredential({ credential: undescribedSigned, knownDIDRegistries: [] });
+check(
+  'the OB3 JSON Schema refuses a signed badge whose achievement has no description',
+  signatureValid(undescribedResult) && schemaInvalid(undescribedResult),
+  undescribedResult,
+);
 
 check('nothing was fetched from the network', refused.length === 0, refused);
 process.exit(failed ? 1 : 0);

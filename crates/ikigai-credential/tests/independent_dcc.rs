@@ -6,7 +6,9 @@
 //!    the issuer's `did:web` document, and the pinned contexts as ikigai-jsonld loads them.
 //! 2. `node tests/dcc/run.mjs $IKIGAI_DCC_DIR` verifies the issued badge with `verifier-core`
 //!    (and refuses a changed one), signs the unsigned badge with DCC's `eddsa-rdfc-2022` suite,
-//!    and writes `dcc-signed.json`. Its `fetch` answers only from that directory.
+//!    and writes `dcc-signed.json`. It checks the Open Badges 3.0 JSON Schema verdict too, both
+//!    ways and with a negative control. Its `fetch` answers only from that directory and from the
+//!    schema vendored beside it (`tests/dcc/SOURCE.md`, checked by digest).
 //! 3. `a_badge_dcc_signs_verifies_here` verifies `dcc-signed.json` here, and refuses it changed.
 
 use ed25519_dalek::{Signer as _, SigningKey, VerifyingKey};

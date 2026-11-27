@@ -17,8 +17,10 @@ issues and verifies `eddsa-rdfc-2022` proofs over Open Badges 3.0 credentials (`
 offline and in JSON-LD safe mode, pinned by the W3C EdDSA vectors, and `resource::space` binds the
 issuer, achievement, credential, issue and verify resources below, signing through ikigai-sign's
 `urn:sign:sign` and writing one ikigai-log entry per issuance. A badge issued here verifies in
-SpruceID's `ssi`, and one `ssi` signs verifies here (`tests/independent_ssi.rs`, offline). Still
-planned: the DCC `verifier-core` check in both directions, a vendored 1EdTech example, a persistent IRI minted through ikigai-name (ikigai-name 0.9.0 has no minting resource,
+SpruceID's `ssi`, and one `ssi` signs verifies here (`tests/independent_ssi.rs`, offline), and the
+same holds both ways with the Digital Credentials Consortium's `verifier-core`, including its Open
+Badges 3.0 JSON Schema check (`tests/dcc/`, the `dcc-verifier-core` CI job, offline). Still
+planned: a vendored 1EdTech example, a persistent IRI minted through ikigai-name (ikigai-name 0.9.0 has no minting resource,
 so the host's template is expanded directly), the status lists (ledger #4146), the page (ledger #4147) and several issuers (ledger
 #4159).
 
