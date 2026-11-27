@@ -237,3 +237,127 @@ fn an_unpinned_context_is_refused_without_a_fetch() {
     eprintln!("{err}");
     assert!(matches!(err, ikigai_credential::Error::Input(_)), "{err}");
 }
+
+/// Issue the badge with these validity bounds and check it at `now`, accepting any `validFrom`.
+fn window(valid_from: &str, valid_until: Option<&str>, now: &str) -> Verdict {
+    let (signer, public) = keys();
+    let mut unsecured = badge();
+    unsecured["validFrom"] = json!(valid_from);
+    if let Some(until) = valid_until {
+        unsecured["validUntil"] = json!(until);
+    }
+    let secured = issue(&unsecured, &options(), &signer).unwrap();
+    verify(secured.to_string().as_bytes(), now, |_, from| {
+        assert_eq!(from, Some(valid_from));
+        Ok(public)
+    })
+    .unwrap()
+}
+
+const NOT_STARTED: &str = "The credential is not valid: its validity period has not started yet.";
+const ENDED: &str = "The credential is not valid: its validity period has ended.";
+
+#[test]
+fn fractional_seconds_are_accepted_and_compared() {
+    let from = "2026-11-01T00:00:00.000Z";
+    let until = Some("2026-12-01T00:00:00.5Z");
+    assert_eq!(window(from, until, "2026-11-15T00:00:00Z"), Verdict::Valid);
+    assert_eq!(
+        window(from, until, "2026-12-01T00:00:00.25Z"),
+        Verdict::Valid
+    );
+    assert_eq!(
+        window(from, until, "2026-12-01T00:00:00.75Z").sentence(),
+        ENDED
+    );
+    assert_eq!(
+        window(from, until, "2026-10-31T23:59:59.999Z").sentence(),
+        NOT_STARTED
+    );
+}
+
+#[test]
+fn a_positive_offset_is_compared_as_an_instant() {
+    // 01:00 at +02:00 is 23:00 the day before in UTC: a string comparison gets both wrong.
+    let from = "2026-11-01T01:00:00+02:00";
+    assert_eq!(window(from, None, "2026-10-31T23:30:00Z"), Verdict::Valid);
+    assert_eq!(window(from, None, "2026-10-31T23:00:00Z"), Verdict::Valid);
+    assert_eq!(
+        window(from, None, "2026-10-31T22:30:00Z").sentence(),
+        NOT_STARTED
+    );
+}
+
+#[test]
+fn a_negative_offset_is_compared_as_an_instant() {
+    // 20:00 at -05:00 is 01:00 the next day in UTC.
+    let from = "2026-11-01T00:00:00Z";
+    let until = Some("2026-11-30T20:00:00-05:00");
+    assert_eq!(window(from, until, "2026-12-01T00:30:00Z"), Verdict::Valid);
+    assert_eq!(window(from, until, "2026-12-01T01:00:00Z"), Verdict::Valid);
+    assert_eq!(
+        window(from, until, "2026-12-01T01:30:00Z").sentence(),
+        ENDED
+    );
+}
+
+#[test]
+fn the_verifier_clock_may_be_in_another_offset() {
+    let from = "2026-11-01T00:00:00Z";
+    let until = Some("2026-12-01T00:00:00Z");
+    // 21:30 at -03:00 is 00:30 the next day in UTC.
+    assert_eq!(
+        window(from, until, "2026-10-31T21:30:00-03:00"),
+        Verdict::Valid
+    );
+    // 01:30 at +02:00 is 23:30 the day before in UTC.
+    assert_eq!(
+        window(from, until, "2026-11-01T01:30:00+02:00").sentence(),
+        NOT_STARTED
+    );
+    assert_eq!(
+        window(from, until, "2026-11-30T21:30:00-03:00").sentence(),
+        ENDED
+    );
+    assert_eq!(
+        window(from, until, "2026-12-01T01:30:00+02:00"),
+        Verdict::Valid
+    );
+}
+
+#[test]
+fn a_date_time_with_no_timezone_is_refused() {
+    assert_eq!(
+        window("2026-11-01T00:00:00", None, "2026-11-15T00:00:00Z").sentence(),
+        "The credential is not valid: its validFrom \"2026-11-01T00:00:00\" has no timezone; \
+         a date-time stamp needs Z or an offset such as +02:00."
+    );
+    assert_eq!(
+        window(
+            "2026-11-01T00:00:00Z",
+            Some("2026-12-01T00:00:00"),
+            "2026-11-15T00:00:00Z"
+        )
+        .sentence(),
+        "The credential is not valid: its validUntil \"2026-12-01T00:00:00\" has no timezone; \
+         a date-time stamp needs Z or an offset such as +02:00."
+    );
+    assert_eq!(
+        window("2026-11-01", None, "2026-11-15T00:00:00Z").sentence(),
+        "The credential is not valid: its validFrom \"2026-11-01\" is not a date-time stamp \
+         such as 2026-11-01T00:00:00Z."
+    );
+    let (signer, public) = keys();
+    let secured = issue(&badge(), &options(), &signer).unwrap();
+    let err = verify(
+        secured.to_string().as_bytes(),
+        "2026-11-15T00:00:00",
+        |_, _| Ok(public),
+    )
+    .unwrap_err();
+    assert_eq!(
+        err.to_string(),
+        "The verifier's clock \"2026-11-15T00:00:00\" has no timezone; \
+         a date-time stamp needs Z or an offset such as +02:00."
+    );
+}

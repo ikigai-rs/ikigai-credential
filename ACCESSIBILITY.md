@@ -42,7 +42,10 @@ has not been tested.
   Tested in `crates/ikigai-credential/tests/eddsa_rdfc_2022.rs` (`the_validity_window_is_checked`).
 - **Refusal sentences** (`Error`): one sentence naming what was wrong and what to do, for example
   "The credential has a node without an id; give every node an id before issuing." Tested in the
-  same file (`a_node_without_an_id_is_refused`). Sentences from JSON-LD expansion are passed
+  same file (`a_node_without_an_id_is_refused`). Date-time sentences name the field and the value
+  and say what form is expected, for example "The credential is not valid: its validFrom
+  \"2026-11-01T00:00:00\" has no timezone; a date-time stamp needs Z or an offset such as
+  +02:00." Tested in the same file (`a_date_time_with_no_timezone_is_refused`). Sentences from JSON-LD expansion are passed
   through from the `json-ld` crate and are not yet rewritten into plain language.
 
 Still planned: the public credential page with its in-browser Verify button and copy controls.
@@ -103,6 +106,7 @@ output people read.
 ### Change history
 
 - 2026-11-26: first version, for the scaffold.
+- 2026-11-27: the date-time sentences for `validFrom`, `validUntil` and the verifier's clock.
 
 ## References
 

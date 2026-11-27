@@ -15,8 +15,10 @@ mod canon;
 
 use ed25519_dalek::{Signature, VerifyingKey};
 use ikigai_sign::multikey::{multibase_decode, multibase_encode};
+use oxsdatatypes::DateTime;
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
+use std::str::FromStr;
 
 /// The prefix every name in this module starts with.
 ///
@@ -177,7 +179,11 @@ impl Verdict {
 /// `bytes` is the request body: its size and nesting are bounded before it is parsed.
 /// `key_as_of(verification_method, valid_from)` returns the issuer's public key that was current
 /// at `validFrom` (from the key history), or a sentence saying why there is none. `now` is the
-/// verifier's clock as an RFC 3339 UTC date-time (`YYYY-MM-DDTHH:MM:SSZ`). Status is not read
+/// verifier's clock as an `xsd:dateTimeStamp` (for example `2026-11-27T12:00:00Z` or
+/// `2026-11-27T14:00:00.5+02:00`); a clock with no timezone is refused. `validFrom` and
+/// `validUntil` are `xsd:dateTimeStamp`s too, as VC 2.0 types them: fractional seconds and any
+/// offset are accepted, the bounds are compared as instants and both are inclusive, and a value
+/// with no timezone makes the verdict invalid with a sentence saying so. Status is not read
 /// here.
 pub fn verify(
     bytes: &[u8],
@@ -187,6 +193,8 @@ pub fn verify(
     let Value::Object(mut document) = parse_bounded(bytes)? else {
         return Err(Error::Input("The credential must be a JSON object.".into()));
     };
+    let now =
+        parse_stamp(now).map_err(|e| Error::Input(e.sentence("The verifier's clock", now)))?;
     let invalid = |s: &str| Ok(Verdict::Invalid(s.to_owned()));
     let Some(Value::Object(proof)) = document.remove("proof") else {
         return invalid("it has no single proof object.");
@@ -209,8 +217,15 @@ pub fn verify(
     else {
         return invalid("its proof value is not a base58-btc multibase Ed25519 signature.");
     };
-    let valid_from = document.get("validFrom").and_then(Value::as_str);
-    let key = match key_as_of(method, valid_from) {
+    let valid_from = match date_time_stamp(&document, "validFrom") {
+        Ok(found) => found,
+        Err(why) => return Ok(Verdict::Invalid(why)),
+    };
+    let valid_until = match date_time_stamp(&document, "validUntil") {
+        Ok(found) => found,
+        Err(why) => return Ok(Verdict::Invalid(why)),
+    };
+    let key = match key_as_of(method, valid_from.map(|(text, _)| text)) {
         Ok(key) => key,
         Err(why) => return Ok(Verdict::Invalid(why)),
     };
@@ -218,39 +233,60 @@ pub fn verify(
     if key.verify_strict(&message, &signature).is_err() {
         return invalid("its proof does not match the issuer's key, so it was changed after signing or signed by another key.");
     }
-    if let Some(from) = valid_from {
-        if !utc_before_or_equal(from, now)? {
+    if let Some((_, from)) = valid_from {
+        if now < from {
             return invalid("its validity period has not started yet.");
         }
     }
-    if let Some(until) = document.get("validUntil").and_then(Value::as_str) {
-        if !utc_before_or_equal(now, until)? {
+    if let Some((_, until)) = valid_until {
+        if until < now {
             return invalid("its validity period has ended.");
         }
     }
     Ok(Verdict::Valid)
 }
 
-/// Compare two `YYYY-MM-DDTHH:MM:SSZ` date-times. Other forms are refused, not guessed.
-fn utc_before_or_equal(a: &str, b: &str) -> Result<bool, Error> {
-    let check = |s: &str| {
-        let ok = s.len() == 20
-            && s.bytes().enumerate().all(|(i, c)| match i {
-                4 | 7 => c == b'-',
-                10 => c == b'T',
-                13 | 16 => c == b':',
-                19 => c == b'Z',
-                _ => c.is_ascii_digit(),
-            });
-        if ok {
-            Ok(())
-        } else {
-            Err(Error::Input(format!(
-                "The date-time {s:?} is not in the form YYYY-MM-DDTHH:MM:SSZ; use UTC with seconds."
-            )))
+/// Parse an `xsd:dateTimeStamp`: an XML Schema `dateTime` that carries a timezone (`Z` or an
+/// offset), with optional fractional seconds. Parsing is oxsdatatypes', the XSD implementation
+/// oxrdf and oxigraph use; two stamps then compare as instants, whatever their offsets.
+fn parse_stamp(text: &str) -> Result<DateTime, StampError> {
+    let parsed = DateTime::from_str(text).map_err(|_| StampError::NotAStamp)?;
+    if parsed.timezone_offset().is_none() {
+        return Err(StampError::NoTimezone);
+    }
+    Ok(parsed)
+}
+
+enum StampError {
+    NotAStamp,
+    NoTimezone,
+}
+
+impl StampError {
+    fn sentence(&self, what: &str, text: &str) -> String {
+        match self {
+            StampError::NoTimezone => format!(
+                "{what} {text:?} has no timezone; a date-time stamp needs Z or an offset such as +02:00."
+            ),
+            StampError::NotAStamp => format!(
+                "{what} {text:?} is not a date-time stamp such as 2026-11-01T00:00:00Z."
+            ),
         }
-    };
-    check(a)?;
-    check(b)?;
-    Ok(a <= b)
+    }
+}
+
+/// The credential's `key` as text and as an instant, if present; a sentence if it is malformed.
+fn date_time_stamp<'a>(
+    document: &'a Map<String, Value>,
+    key: &str,
+) -> Result<Option<(&'a str, DateTime)>, String> {
+    match document.get(key) {
+        None => Ok(None),
+        Some(Value::String(text)) => parse_stamp(text)
+            .map(|at| Some((text.as_str(), at)))
+            .map_err(|e| e.sentence(&format!("its {key}"), text)),
+        Some(other) => {
+            Err(StampError::NotAStamp.sentence(&format!("its {key}"), &other.to_string()))
+        }
+    }
 }
