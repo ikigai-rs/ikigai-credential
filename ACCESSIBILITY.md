@@ -37,10 +37,18 @@ has not been tested.
 
 ### In scope
 
-Nothing yet. The repository is a scaffold: the crate exports one constant and no endpoint. As the
-crate adds output people read, each is listed here with its form and its test. The planned ones
-are verification verdicts, refusal sentences, and the public credential page with its in-browser
-Verify button and copy controls.
+- **Verification verdicts** (`Verdict::sentence`): one sentence that says what was checked and
+  what was found, for example "The credential is not valid: its validity period has ended."
+  Tested in `crates/ikigai-credential/tests/eddsa_rdfc_2022.rs` (`the_validity_window_is_checked`).
+- **Refusal sentences** (`Error`): one sentence naming what was wrong and what to do, for example
+  "The credential has a node without an id; give every node an id before issuing." Tested in the
+  same file (`a_node_without_an_id_is_refused`). Date-time sentences name the field and the value
+  and say what form is expected, for example "The credential is not valid: its validFrom
+  \"2026-11-01T00:00:00\" has no timezone; a date-time stamp needs Z or an offset such as
+  +02:00." Tested in the same file (`a_date_time_with_no_timezone_is_refused`). Sentences from JSON-LD expansion are passed
+  through from the `json-ld` crate and are not yet rewritten into plain language.
+
+Still planned: the public credential page with its in-browser Verify button and copy controls.
 
 ### Not ours to fix, still ours to report
 
@@ -98,6 +106,7 @@ output people read.
 ### Change history
 
 - 2026-11-26: first version, for the scaffold.
+- 2026-11-27: the date-time sentences for `validFrom`, `validUntil` and the verifier's clock.
 
 ## References
 

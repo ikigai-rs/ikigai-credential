@@ -12,8 +12,11 @@ SHA-256, and signed with Ed25519 by [ikigai-sign](https://github.com/ikigai-rs/i
 are Multikey and the signature is base58-btc multibase. No JWT form, and no selective-disclosure
 suite for issuing. Verifying `ecdsa-sd-2023` comes later.
 
-Status: **nothing is built yet.** This repository is a scaffold; the map below is the plan,
-tracked as ledger #4143, ledger #4146, ledger #4147 and ledger #4159.
+Status: **the cryptosuite core is built; the resources are not.** The crate issues and verifies
+`eddsa-rdfc-2022` proofs over Open Badges 3.0 credentials (`issue`, `verify`), offline and in
+JSON-LD safe mode, pinned by the W3C EdDSA vectors. The `urn:credential:*` resources in the map
+below, the independent-verifier tests and the status lists are still the plan, tracked as ledger
+#4143, ledger #4146, ledger #4147 and ledger #4159.
 
 ## The resource map (planned)
 

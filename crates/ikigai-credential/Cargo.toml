@@ -13,3 +13,17 @@ categories = ["wasm", "cryptography"]
 publish = false
 
 [dependencies]
+ikigai-jsonld = "0.5.3"
+ikigai-rdf = { version = "0.7.0", default-features = false }
+ikigai-sign = "0.6.2"
+json-ld = { version = "0.21", default-features = false }
+rdf-types = "0.22"
+oxrdf = "0.3"
+serde_json = "1"
+sha2 = "0.10"
+futures = { version = "0.3", default-features = false, features = ["executor"] }
+ed25519-dalek = "2"
+oxsdatatypes = "0.2"
+
+[dev-dependencies]
+ed25519-dalek = { version = "2", features = ["rand_core"] }
